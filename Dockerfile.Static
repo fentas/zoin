@@ -1,0 +1,49 @@
+FROM ubuntu:18.04 as build
+
+# dependencies
+RUN set -ex \
+  && apt-get update \
+  && apt-get install -y software-properties-common \
+  && add-apt-repository -y ppa:bitcoin/bitcoin \
+  && apt-get install dirmngr -y --install-recommends \
+  &&  apt-get install -y \
+    build-essential libtool autotools-dev automake pkg-config \
+    libssl-dev libevent-dev bsdmainutils libboost-all-dev \
+    software-properties-common \
+    libdb4.8-dev libdb4.8++-dev \
+    libminiupnpc-dev libzmq3-dev \
+    libqt5gui5 libqt5core5a libqt5dbus5 \
+    qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev \
+    vim htop curl dnsutils unzip git
+
+# compile (staticly linked)
+RUN set -ex \
+  && git clone https://github.com/zoinofficial/zoin \
+  && cd ./zoin \
+  && ./autogen.sh \
+  && ./configure --enable-cxx --disable-shared --with-pic \
+  && make \
+  && make check
+
+# TODO: build zoin core wallet staticly linked - see below
+FROM ubuntu:18.04
+RUN set -ex \
+  && apt-get update \
+  && apt-get install -y \
+    libzmq3-dev \
+    libdb4.8-dev libdb4.8++-dev \
+    libboost-system-dev libboost-filesystem-dev libboost-chrono-dev libboost-program-options-dev libboost-test-dev libboost-thread-dev \
+    libqt5gui5 libqt5core5a libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler \
+    libqrencode-dev \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+COPY --from=build /zoin/src/qt/zoin-qt /usr/bin/
+COPY --from=build /zoin/src/zoin-cli /usr/bin/
+COPY --from=build /zoin/src/zoin-tx /usr/bin/
+COPY --from=build /zoin/src/zoind /usr/bin/
+ENTRYPOINT ["zoin-qt"]
+
+# copy binaries - TODO staticly build does not work (still requires *.so)
+# FROM alpine:3.7
+# COPY --from=build /zoin/src/qt/zoin-qt /usr/bin/
+# ENTRYPOINT ["zoin-qt"]
